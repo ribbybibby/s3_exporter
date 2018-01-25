@@ -183,7 +183,7 @@ func main() {
 						 <head><title>AWS S3 Exporter</title></head>
 						 <body>
 						 <h1>AWS S3 Exporter</h1>
-						 <p><a href="` + *probePath + `?target=example.com:443">Probe example.com:443 for SSL cert metrics</a></p>
+						 <p><a href="` + *probePath + `?bucket=BUCKET&prefix=PREFIX">Query metrics for objects in BUCKET that match PREFIX</a></p>
 						 <p><a href='` + *metricsPath + `'>Metrics</a></p>
 						 </body>
 						 </html>`))
