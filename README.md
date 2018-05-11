@@ -22,9 +22,16 @@ Remember, if you want to load credentials from `~/.aws/config` then you need to 
 
     export AWS_SDK_LOAD_CONFIG=true
 
-## Docker
+### Docker
     docker pull ribbybibby/s3-exporter
-    docker run -p 9340:9340 s3-exporter:latest <flags>
+
+You will need to supply AWS credentials to the container, as mentioned in the previous section, either by setting the appropriate environment variables with `-e`, or by mounting your `~/.aws/` directory with `-v`.
+
+    # Environment variables
+    docker run -p 9340:9340 -e AWS_ACCESS_KEY_ID=<value> -e AWS_SECRET_ACCESS_KEY=<value> -e AWS_REGION=<value> s3-exporter:latest <flags>
+    # Mounted volume
+    docker run -p 9340:9340 -e AWS_SDK_LOAD_CONFIG=true -e HOME=/ -v $HOME/.aws:/.aws s3-exporter:latest <flags>
+
 
 ## Flags
     ./s3_exporter --help
