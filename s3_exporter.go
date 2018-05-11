@@ -10,7 +10,6 @@ import (
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
@@ -142,10 +141,9 @@ func init() {
 
 func main() {
 	var (
-		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":8080").String()
+		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
 		metricsPath   = kingpin.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
 		probePath     = kingpin.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
-		region        = kingpin.Flag("aws.region", "AWS region").Default("").String()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
@@ -156,19 +154,11 @@ func main() {
 	var sess *session.Session
 	var err error
 
-	if *region != "" {
-		sess, err = session.NewSession(&aws.Config{
-			Region: aws.String(*region),
-		})
-		if err != nil {
-			log.Errorln("Error creating sessions ", err)
-		}
-	} else {
-		sess, err = session.NewSession()
-		if err != nil {
-			log.Errorln("Error creating sessions ", err)
-		}
+	sess, err = session.NewSession()
+	if err != nil {
+		log.Errorln("Error creating sessions ", err)
 	}
+
 	svc := s3.New(sess)
 
 	log.Infoln("Starting "+namespace+"_exporter", version.Info())
