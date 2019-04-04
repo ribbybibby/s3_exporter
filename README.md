@@ -22,6 +22,13 @@ Remember, if you want to load credentials from `~/.aws/config` then you need to 
 
     export AWS_SDK_LOAD_CONFIG=true
 
+### Additional S3 variables
+You have ability to specify S3 endpoint if you need to use the S3 exporter with internal S3 service.
+
+Just set S3_ENDPOINT_URL environment variable, e.g.:
+
+    S3_ENDPOINT_URL=http://s3.example.local
+
 ### Docker
     docker pull ribbybibby/s3-exporter
 
@@ -77,5 +84,5 @@ scrape_configs:
 ```
 ### Example Queries
 Return series where the last modified object date is more than 24 hours ago:
-    
+
     (time() - s3_last_modified_object_date) / 3600 > 24
