@@ -22,13 +22,6 @@ Remember, if you want to load credentials from `~/.aws/config` then you need to 
 
     export AWS_SDK_LOAD_CONFIG=true
 
-### Additional S3 variables
-You have ability to specify S3 endpoint if you need to use the S3 exporter with internal S3 service.
-
-Just set S3_ENDPOINT_URL environment variable, e.g.:
-
-    S3_ENDPOINT_URL=http://s3.example.local
-
 ### Docker
     docker pull ribbybibby/s3-exporter
 
@@ -45,6 +38,8 @@ You will need to supply AWS credentials to the container, as mentioned in the pr
  * __`--web.listen-address`:__ The port (default ":9340").
  * __`--web.metrics-path`:__ The path metrics are exposed under (default "/metrics")
  * __`--web.probe-path`:__ The path the probe endpoint is exposed under (default "/probe")
+ * __`--s3.endpoint-url`:__ The custom endpoint URL for S3 service (optional parameter).
+Also you can set it by environment variable, e.g.: S3_ENDPOINT_URL=http://s3.example.local
 
 ## Metrics
 

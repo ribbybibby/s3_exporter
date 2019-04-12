@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"net/http"
 	"time"
 
@@ -146,6 +145,7 @@ func main() {
 		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
 		metricsPath   = kingpin.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
 		probePath     = kingpin.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
+		endpointUrl   = kingpin.Flag("s3.endpoint-url", "Custom endpoint URL for S3 service").Default("").Envar("S3_ENDPOINT_URL").String()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
@@ -163,8 +163,8 @@ func main() {
 
 	cfg := aws.NewConfig()
 
-	if len(os.Getenv("S3_ENDPOINT_URL")) != 0 {
-		cfg.WithEndpoint(os.Getenv("S3_ENDPOINT_URL"))
+	if len(*endpointUrl) != 0 {
+		cfg.WithEndpoint(*endpointUrl)
 	}
 
 	svc := s3.New(sess, cfg)
