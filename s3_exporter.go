@@ -88,7 +88,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		for _, item := range resp.Contents {
 			numberOfObjects++
 			totalSize = totalSize + *item.Size
-			if item.LastModified.After(lastModified) == true {
+			if item.LastModified.After(lastModified) {
 				lastModified = *item.LastModified
 			}
 			if *item.Size > biggestObjectSize {
@@ -164,7 +164,7 @@ func main() {
 	log.Infoln("Starting "+namespace+"_exporter", version.Info())
 	log.Infoln("Build context", version.BuildContext())
 
-	http.Handle(*metricsPath, prometheus.Handler())
+	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc(*probePath, func(w http.ResponseWriter, r *http.Request) {
 		probeHandler(w, r, svc)
 	})
