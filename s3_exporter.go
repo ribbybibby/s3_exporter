@@ -145,7 +145,7 @@ func main() {
 		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
 		metricsPath   = kingpin.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
 		probePath     = kingpin.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
-		endpointUrl   = kingpin.Flag("s3.endpoint-url", "Custom endpoint URL for S3 service").Default("").Envar("S3_ENDPOINT_URL").String()
+		endpointURL   = kingpin.Flag("s3.endpoint-url", "Custom endpoint URL for S3 service").Default("").String()
 	)
 
 	log.AddFlags(kingpin.CommandLine)

@@ -39,7 +39,7 @@ You will need to supply AWS credentials to the container, as mentioned in the pr
  * __`--web.metrics-path`:__ The path metrics are exposed under (default "/metrics")
  * __`--web.probe-path`:__ The path the probe endpoint is exposed under (default "/probe")
  * __`--s3.endpoint-url`:__ The custom endpoint URL for S3 service (optional parameter).
-Also you can set it by environment variable, e.g.: S3_ENDPOINT_URL=http://s3.example.local
+Also you can set it by environment variable, e.g.: S3_EXPORTER_S3_ENDPOINT_URL=http://s3.example.local
 
 ## Metrics
 
