@@ -1,37 +1,43 @@
 # AWS S3 Exporter
-__Situation/Problem:__ I want to verify that my backup tasks are running but I don't necessarily have the ability to instrument the backup application I'm using. My backups go to an S3 bucket. If I could alert when the last modified date is outside a known range, then I'd have a fairly good indiciation when something is wrong with my backups.
+This exporter provides metrics for AWS S3 bucket objects by querying the API with a given bucket and prefix and constructing metrics based on the returned objects.
 
-__Solution:__ An exporter that can report the last modified date for objects in a bucket that match a given prefix.
-
-This exporter queries the S3 API with a given bucket and prefix and constructs metrics based on the returned objects. For my purposes the last modified date is the important one, but there are others.
+I find it useful for ensuring that backup jobs and batch uploads are functioning by comparing the growth in size/number of objects over time, or comparing the last modified date to an expected value.
 
 ## Building
-    make
+```
+make
+```
 
 ## Running
-    ./s3_exporter <flags>
+```
+./s3_exporter <flags>
+```
 
 You can query a bucket and prefix combination by supplying them as parameters to /probe:
-
-    localhost:9340/probe?bucket=some-bucket&prefix=some-prefix.txt
+```
+curl localhost:9340/probe?bucket=some-bucket&prefix=some-folder/some-file.txt
+```
 
 ### AWS Credentials
 The exporter creates an AWS session without any configuration. You must specify credentials yourself as documented [here](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html).
 
 Remember, if you want to load credentials from `~/.aws/config` then you need to to set:
-
-    export AWS_SDK_LOAD_CONFIG=true
+```
+export AWS_SDK_LOAD_CONFIG=true
+```
 
 ### Docker
-    docker pull ribbybibby/s3-exporter
+```
+docker pull ribbybibby/s3-exporter
+```
 
 You will need to supply AWS credentials to the container, as mentioned in the previous section, either by setting the appropriate environment variables with `-e`, or by mounting your `~/.aws/` directory with `-v`.
-
-    # Environment variables
-    docker run -p 9340:9340 -e AWS_ACCESS_KEY_ID=<value> -e AWS_SECRET_ACCESS_KEY=<value> -e AWS_REGION=<value> s3-exporter:latest <flags>
-    # Mounted volume
-    docker run -p 9340:9340 -e AWS_SDK_LOAD_CONFIG=true -e HOME=/ -v $HOME/.aws:/.aws s3-exporter:latest <flags>
-
+```
+# Environment variables
+docker run -p 9340:9340 -e AWS_ACCESS_KEY_ID=<value> -e AWS_SECRET_ACCESS_KEY=<value> -e AWS_REGION=<value> s3-exporter:latest <flags>
+# Mounted volume
+docker run -p 9340:9340 -e AWS_SDK_LOAD_CONFIG=true -e HOME=/ -v $HOME/.aws:/.aws s3-exporter:latest <flags>
+```
 
 ## Flags
     ./s3_exporter --help
@@ -40,7 +46,6 @@ You will need to supply AWS credentials to the container, as mentioned in the pr
  * __`--web.probe-path`:__ The path the probe endpoint is exposed under (default "/probe")
 
 ## Metrics
-
 
 | Metric | Meaning | Labels |
 | ------ | ------- | ------ |
@@ -54,7 +59,6 @@ You will need to supply AWS credentials to the container, as mentioned in the pr
 ### Configuration
 You should pass the params to a single instance of the exporter using relabelling, like so:
 ```yml
-scrape_configs:
 scrape_configs:
   - job_name: 's3'
     metrics_path: /probe
@@ -77,5 +81,6 @@ scrape_configs:
 ```
 ### Example Queries
 Return series where the last modified object date is more than 24 hours ago:
-    
-    (time() - s3_last_modified_object_date) / 3600 > 24
+```
+(time() - s3_last_modified_object_date) / 3600 > 24
+```
