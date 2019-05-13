@@ -44,6 +44,7 @@ docker run -p 9340:9340 -e AWS_SDK_LOAD_CONFIG=true -e HOME=/ -v $HOME/.aws:/.aw
  * __`--web.listen-address`:__ The port (default ":9340").
  * __`--web.metrics-path`:__ The path metrics are exposed under (default "/metrics")
  * __`--web.probe-path`:__ The path the probe endpoint is exposed under (default "/probe")
+ * __`--aws.role-arn`:__ AWS IAM role ARN to assume (optional)
 
 ## Metrics
 

@@ -10,6 +10,8 @@ import (
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
@@ -144,6 +146,7 @@ func main() {
 		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
 		metricsPath   = kingpin.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
 		probePath     = kingpin.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
+		roleArn       = kingpin.Flag("aws.role-arn", "AWS IAM role ARN to assume (optional)").Default("").String()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
@@ -159,7 +162,13 @@ func main() {
 		log.Errorln("Error creating sessions ", err)
 	}
 
-	svc := s3.New(sess)
+	cfg := aws.NewConfig()
+
+	if len(*roleArn) != 0 {
+		cfg.WithCredentials(stscreds.NewCredentials(sess, *roleArn))
+	}
+
+	svc := s3.New(sess, cfg)
 
 	log.Infoln("Starting "+namespace+"_exporter", version.Info())
 	log.Infoln("Build context", version.BuildContext())
