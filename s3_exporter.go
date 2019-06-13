@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
 const (
@@ -50,7 +51,7 @@ var (
 type Exporter struct {
 	bucket string
 	prefix string
-	svc    *s3.S3
+	svc    s3iface.S3API
 }
 
 // Describe all the metrics we export
@@ -116,7 +117,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	)
 }
 
-func probeHandler(w http.ResponseWriter, r *http.Request, svc *s3.S3) {
+func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 
 	bucket := r.URL.Query().Get("bucket")
 	prefix := r.URL.Query().Get("prefix")
