@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -10,6 +11,7 @@ import (
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -142,15 +144,17 @@ func init() {
 
 func main() {
 	var (
-		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
-		metricsPath   = kingpin.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
-		probePath     = kingpin.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
+		app           = kingpin.New(namespace+"_exporter", "Export metrics for S3 certificates").DefaultEnvars()
+		listenAddress = app.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
+		metricsPath   = app.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
+		probePath     = app.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
+		endpointURL   = app.Flag("s3.endpoint-url", "Custom endpoint URL").Default("").String()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
-	kingpin.Version(version.Print(namespace + "_exporter"))
-	kingpin.HelpFlag.Short('h')
-	kingpin.Parse()
+	app.Version(version.Print(namespace + "_exporter"))
+	app.HelpFlag.Short('h')
+	kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	var sess *session.Session
 	var err error
@@ -160,7 +164,12 @@ func main() {
 		log.Errorln("Error creating sessions ", err)
 	}
 
-	svc := s3.New(sess)
+	cfg := aws.NewConfig()
+	if *endpointURL != "" {
+		cfg.WithEndpoint(*endpointURL)
+	}
+
+	svc := s3.New(sess, cfg)
 
 	log.Infoln("Starting "+namespace+"_exporter", version.Info())
 	log.Infoln("Build context", version.BuildContext())

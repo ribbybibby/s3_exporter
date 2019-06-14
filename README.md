@@ -44,6 +44,9 @@ docker run -p 9340:9340 -e AWS_SDK_LOAD_CONFIG=true -e HOME=/ -v $HOME/.aws:/.aw
  * __`--web.listen-address`:__ The port (default ":9340").
  * __`--web.metrics-path`:__ The path metrics are exposed under (default "/metrics")
  * __`--web.probe-path`:__ The path the probe endpoint is exposed under (default "/probe")
+ * __`--s3.endpoint-url`:__ A [custom endpoint URL](https://docs.aws.amazon.com/general/latest/gr/rande.html) (optional)
+
+Flags can also be set as environment variables, prefixed by `S3_EXPORTER_`. For example: `S3_EXPORTER_S3_ENDPOINT_URL=http://s3.example.local`.
 
 ## Metrics
 
