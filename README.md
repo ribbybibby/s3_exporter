@@ -56,6 +56,7 @@ Flags can also be set as environment variables, prefixed by `S3_EXPORTER_`. For 
 | ------ | ------- | ------ |
 | s3_biggest_object_size_bytes | The size of the largest object. | bucket, prefix |
 | s3_last_modified_object_date | The modification date of the most recently modified object. | bucket, prefix |
+| s3_last_modified_object_size_bytes | The size of the object that was modified most recently. | bucket, prefix |
 | s3_list_success | Did the ListObjects operation complete successfully? | bucket, prefix |
 | s3_objects_size_sum_bytes | The sum of the size of all the objects. | bucket, prefix |
 | s3_objects_total | The total number of objects. | bucket, prefix |

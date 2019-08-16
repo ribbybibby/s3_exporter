@@ -32,6 +32,11 @@ var (
 		"The last modified date of the object that was modified most recently",
 		[]string{"bucket", "prefix"}, nil,
 	)
+	s3LastModifiedObjectSize = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "last_modified_object_size_bytes"),
+		"The size of the object that was modified most recently",
+		[]string{"bucket", "prefix"}, nil,
+	)
 	s3ObjectTotal = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "objects_total"),
 		"The total number of objects for the bucket/prefix combination",
@@ -60,6 +65,7 @@ type Exporter struct {
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s3ListSuccess
 	ch <- s3LastModifiedObjectDate
+	ch <- s3LastModifiedObjectSize
 	ch <- s3ObjectTotal
 	ch <- s3SumSize
 	ch <- s3BiggestSize
@@ -71,6 +77,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	var numberOfObjects float64
 	var totalSize int64
 	var biggestObjectSize int64
+	var lastObjectSize int64
 
 	query := &s3.ListObjectsV2Input{
 		Bucket: &e.bucket,
@@ -93,6 +100,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			totalSize = totalSize + *item.Size
 			if item.LastModified.After(lastModified) {
 				lastModified = *item.LastModified
+				lastObjectSize = *item.Size
 			}
 			if *item.Size > biggestObjectSize {
 				biggestObjectSize = *item.Size
@@ -107,6 +115,9 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	)
 	ch <- prometheus.MustNewConstMetric(
 		s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), e.bucket, e.prefix,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), e.bucket, e.prefix,
 	)
 	ch <- prometheus.MustNewConstMetric(
 		s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, e.bucket, e.prefix,

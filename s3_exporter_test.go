@@ -23,6 +23,7 @@ var (
 			ExpectedOutputLines: []string{
 				"s3_list_success{bucket=\"mock\",prefix=\"one\"} 1",
 				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"one\"} 1.5604596e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
 				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
 				"s3_objects_total{bucket=\"mock\",prefix=\"one\"} 1",
@@ -50,6 +51,7 @@ var (
 			ExpectedOutputLines: []string{
 				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"none\"} 0",
 				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"none\"} -6.795364578e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"none\"} 0",
 				"s3_list_success{bucket=\"mock\",prefix=\"none\"} 1",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"none\"} 0",
 				"s3_objects_total{bucket=\"mock\",prefix=\"none\"} 0",
@@ -71,6 +73,7 @@ var (
 			ExpectedOutputLines: []string{
 				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"multiple\"} 4567",
 				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"multiple\"} 1.568592e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"multiple\"} 4567",
 				"s3_list_success{bucket=\"mock\",prefix=\"multiple\"} 1",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"multiple\"} 11602",
 				"s3_objects_total{bucket=\"mock\",prefix=\"multiple\"} 4",
