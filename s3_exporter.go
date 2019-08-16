@@ -144,11 +144,13 @@ func init() {
 
 func main() {
 	var (
-		app           = kingpin.New(namespace+"_exporter", "Export metrics for S3 certificates").DefaultEnvars()
-		listenAddress = app.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
-		metricsPath   = app.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
-		probePath     = app.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
-		endpointURL   = app.Flag("s3.endpoint-url", "Custom endpoint URL").Default("").String()
+		app            = kingpin.New(namespace+"_exporter", "Export metrics for S3 certificates").DefaultEnvars()
+		listenAddress  = app.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
+		metricsPath    = app.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
+		probePath      = app.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
+		endpointURL    = app.Flag("s3.endpoint-url", "Custom endpoint URL").Default("").String()
+		disableSSL     = app.Flag("s3.disable-ssl", "Custom disable SSL").Bool()
+		forcePathStyle = app.Flag("s3.force-path-style", "Custom force path style").Bool()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
@@ -168,6 +170,9 @@ func main() {
 	if *endpointURL != "" {
 		cfg.WithEndpoint(*endpointURL)
 	}
+
+	cfg.WithDisableSSL(*disableSSL)
+	cfg.WithS3ForcePathStyle(*forcePathStyle)
 
 	svc := s3.New(sess, cfg)
 
