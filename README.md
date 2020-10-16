@@ -13,9 +13,18 @@ make
 ./s3_exporter <flags>
 ```
 
-You can query a bucket and prefix combination by supplying them as parameters to /probe:
+You can query a prefix in one, more or all buckets by supplying them as parameters to /probe:
 ```
+# One bucket
 curl localhost:9340/probe?bucket=some-bucket&prefix=some-folder/some-file.txt
+```
+```
+# Multiple buckets
+curl localhost:9340/probe?bucket=some-bucket,another-bucket&prefix=some-folder/some-file.txt
+```
+```
+# All buckets
+curl localhost:9340/probe?prefix=some-folder/some-file.txt
 ```
 
 ### AWS Credentials

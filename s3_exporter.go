@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,9 +58,9 @@ var (
 
 // Exporter is our exporter type
 type Exporter struct {
-	bucket string
-	prefix string
-	svc    s3iface.S3API
+	buckets []string
+	prefix  string
+	svc     s3iface.S3API
 }
 
 // Describe all the metrics we export
@@ -79,55 +81,64 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	var biggestObjectSize int64
 	var lastObjectSize int64
 
-	query := &s3.ListObjectsV2Input{
-		Bucket: &e.bucket,
-		Prefix: &e.prefix,
-	}
+	for _, bucket := range e.buckets {
 
-	// Continue making requests until we've listed and compared the date of every object
-	truncated := true
-	for truncated {
-		resp, err := e.svc.ListObjectsV2(query)
-		if err != nil {
-			log.Errorln(err)
+		query := &s3.ListObjectsV2Input{
+			Bucket: &bucket,
+			Prefix: &e.prefix,
+		}
+
+		list_successfull := 1.0
+
+		// Continue making requests until we've listed and compared the date of every object
+		truncated := true
+		for truncated {
+			resp, err := e.svc.ListObjectsV2(query)
+			if err != nil {
+				log.Errorln(err)
+				list_successfull = 0.0
+				truncated = false // Break loop
+				continue
+			}
+
+			for _, item := range resp.Contents {
+				numberOfObjects++
+				totalSize = totalSize + *item.Size
+				if item.LastModified.After(lastModified) {
+					lastModified = *item.LastModified
+					lastObjectSize = *item.Size
+				}
+				if *item.Size > biggestObjectSize {
+					biggestObjectSize = *item.Size
+				}
+			}
+			query.ContinuationToken = resp.NextContinuationToken
+			truncated = *resp.IsTruncated
+		}
+
+		ch <- prometheus.MustNewConstMetric(
+			s3ListSuccess, prometheus.GaugeValue, list_successfull, bucket, e.prefix,
+		)
+
+		if (list_successfull > 0) {
+
 			ch <- prometheus.MustNewConstMetric(
-				s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix,
+				s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), bucket, e.prefix,
 			)
-			return
+			ch <- prometheus.MustNewConstMetric(
+				s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), bucket, e.prefix,
+			)
+			ch <- prometheus.MustNewConstMetric(
+				s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, bucket, e.prefix,
+			)
+			ch <- prometheus.MustNewConstMetric(
+				s3BiggestSize, prometheus.GaugeValue, float64(biggestObjectSize), bucket, e.prefix,
+			)
+			ch <- prometheus.MustNewConstMetric(
+				s3SumSize, prometheus.GaugeValue, float64(totalSize), bucket, e.prefix,
+			)
 		}
-		for _, item := range resp.Contents {
-			numberOfObjects++
-			totalSize = totalSize + *item.Size
-			if item.LastModified.After(lastModified) {
-				lastModified = *item.LastModified
-				lastObjectSize = *item.Size
-			}
-			if *item.Size > biggestObjectSize {
-				biggestObjectSize = *item.Size
-			}
-		}
-		query.ContinuationToken = resp.NextContinuationToken
-		truncated = *resp.IsTruncated
 	}
-
-	ch <- prometheus.MustNewConstMetric(
-		s3ListSuccess, prometheus.GaugeValue, 1, e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3BiggestSize, prometheus.GaugeValue, float64(biggestObjectSize), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3SumSize, prometheus.GaugeValue, float64(totalSize), e.bucket, e.prefix,
-	)
 }
 
 func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
@@ -135,10 +146,30 @@ func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 	bucket := r.URL.Query().Get("bucket")
 	prefix := r.URL.Query().Get("prefix")
 
+	var buckets []string
+
+	if strings.TrimSpace(bucket) != "" {
+		buckets = strings.Split(bucket, ",")
+	} else {
+		result, err := svc.ListBuckets(nil)
+		if err != nil {
+			fmt.Errorf("Unable to list buckets, %v", err)
+		}
+
+		fmt.Println("Buckets:")
+
+		for _, b := range result.Buckets {
+			fmt.Printf("* %s created on %s\n",
+				aws.StringValue(b.Name), aws.TimeValue(b.CreationDate))
+
+			buckets = append(buckets, aws.StringValue(b.Name))
+
+		}
+	}
 	exporter := &Exporter{
-		bucket: bucket,
-		prefix: prefix,
-		svc:    svc,
+		buckets: buckets,
+		prefix:  prefix,
+		svc:     svc,
 	}
 
 	registry := prometheus.NewRegistry()
@@ -199,7 +230,7 @@ func main() {
 						 <head><title>AWS S3 Exporter</title></head>
 						 <body>
 						 <h1>AWS S3 Exporter</h1>
-						 <p><a href="` + *probePath + `?bucket=BUCKET&prefix=PREFIX">Query metrics for objects in BUCKET that match PREFIX</a></p>
+						 <p><a href="` + *probePath + `?bucket=BUCKET[,BUCKET]&prefix=PREFIX">Query metrics for objects in BUCKET that match PREFIX</a></p>
 						 <p><a href='` + *metricsPath + `'>Metrics</a></p>
 						 </body>
 						 </html>`))
