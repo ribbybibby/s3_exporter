@@ -26,7 +26,7 @@ var (
 				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
 				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
-				"s3_objects_total{bucket=\"mock\",prefix=\"one\"} 1",
+				"s3_objects{bucket=\"mock\",prefix=\"one\"} 1",
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
@@ -54,7 +54,7 @@ var (
 				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"none\"} 0",
 				"s3_list_success{bucket=\"mock\",prefix=\"none\"} 1",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"none\"} 0",
-				"s3_objects_total{bucket=\"mock\",prefix=\"none\"} 0",
+				"s3_objects{bucket=\"mock\",prefix=\"none\"} 0",
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents:    []*s3.Object{},
@@ -76,7 +76,7 @@ var (
 				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"multiple\"} 4567",
 				"s3_list_success{bucket=\"mock\",prefix=\"multiple\"} 1",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"multiple\"} 11602",
-				"s3_objects_total{bucket=\"mock\",prefix=\"multiple\"} 4",
+				"s3_objects{bucket=\"mock\",prefix=\"multiple\"} 4",
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
