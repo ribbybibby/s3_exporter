@@ -1,0 +1,24 @@
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build the Docker image
+        run: docker build .
+      - name: Set up Go
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.15.x
+      - name: Build release snapshot
+        run: make snapshot
+      - name: Archive release snapshot
+        uses: actions/upload-artifact@v2
+        with:
+          name: release-snapshot
+          path: |
+            bin/*.tar.gz
+            bin/*.txt
+            bin/*.yaml
