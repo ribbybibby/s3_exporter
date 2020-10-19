@@ -87,7 +87,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			Prefix: &e.prefix,
 		}
 
-		list_successfull := 1.0
+		listSuccessfull := 1
 
 		// Continue making requests until we've listed and compared the date of every object
 		truncated := true
@@ -95,7 +95,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			resp, err := e.svc.ListObjectsV2(query)
 			if err != nil {
 				log.Errorln(err)
-				list_successfull = 0.0
+				listSuccessfull = 0
 				truncated = false // Break loop
 				continue
 			}
@@ -116,10 +116,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		ch <- prometheus.MustNewConstMetric(
-			s3ListSuccess, prometheus.GaugeValue, list_successfull, bucket, e.prefix,
+			s3ListSuccess, prometheus.GaugeValue, float64(listSuccessfull), bucket, e.prefix,
 		)
 
-		if (list_successfull > 0) {
+		if (listSuccessfull > 0) {
 
 			ch <- prometheus.MustNewConstMetric(
 				s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), bucket, e.prefix,
