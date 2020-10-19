@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -151,20 +150,24 @@ func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 	if strings.TrimSpace(bucket) != "" {
 		buckets = strings.Split(bucket, ",")
 	} else {
+
 		result, err := svc.ListBuckets(nil)
-		if err != nil {
-			fmt.Errorf("Unable to list buckets, %v", err)
+		if err != nil  {
+			log.Errorf("Unable to list buckets, %v", err)
+			// Throw 500 back, so prometheus will mark it as down
+			w.WriteHeader(500)
+			w.Write([]byte("internal server error"))
+			return
 		}
 
-		fmt.Println("Buckets:")
+		if len(result.Buckets) == 0  {
+			log.Warnln("No buckets founds")
+		}
 
 		for _, b := range result.Buckets {
-			fmt.Printf("* %s created on %s\n",
-				aws.StringValue(b.Name), aws.TimeValue(b.CreationDate))
-
 			buckets = append(buckets, aws.StringValue(b.Name))
-
 		}
+
 	}
 	exporter := &Exporter{
 		buckets: buckets,
