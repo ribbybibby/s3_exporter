@@ -39,7 +39,7 @@ var (
 		[]string{"bucket", "prefix"}, nil,
 	)
 	s3ObjectTotal = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "objects_total"),
+		prometheus.BuildFQName(namespace, "", "objects"),
 		"The total number of objects for the bucket/prefix combination",
 		[]string{"bucket", "prefix"}, nil,
 	)
