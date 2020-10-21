@@ -27,6 +27,11 @@ var (
 		"If the ListObjects operation was a success",
 		[]string{"bucket", "prefix"}, nil,
 	)
+	s3ListDuration = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "list_duration_seconds"),
+		"The total duration of the list operation",
+		[]string{"bucket", "prefix"}, nil,
+	)
 	s3LastModifiedObjectDate = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "last_modified_object_date"),
 		"The last modified date of the object that was modified most recently",
@@ -64,6 +69,7 @@ type Exporter struct {
 // Describe all the metrics we export
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s3ListSuccess
+	ch <- s3ListDuration
 	ch <- s3LastModifiedObjectDate
 	ch <- s3LastModifiedObjectSize
 	ch <- s3ObjectTotal
@@ -85,6 +91,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// Continue making requests until we've listed and compared the date of every object
+	startList := time.Now()
 	truncated := true
 	for truncated {
 		resp, err := e.svc.ListObjectsV2(query)
@@ -109,9 +116,13 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		query.ContinuationToken = resp.NextContinuationToken
 		truncated = *resp.IsTruncated
 	}
+	listDuration := time.Now().Sub(startList).Seconds()
 
 	ch <- prometheus.MustNewConstMetric(
 		s3ListSuccess, prometheus.GaugeValue, 1, e.bucket, e.prefix,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		s3ListDuration, prometheus.GaugeValue, listDuration, e.bucket, e.prefix,
 	)
 	ch <- prometheus.MustNewConstMetric(
 		s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), e.bucket, e.prefix,
