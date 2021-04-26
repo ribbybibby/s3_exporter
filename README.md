@@ -1,37 +1,45 @@
 # AWS S3 Exporter
+
 This exporter provides metrics for AWS S3 bucket objects by querying the API with a given bucket and prefix and constructing metrics based on the returned objects.
 
 I find it useful for ensuring that backup jobs and batch uploads are functioning by comparing the growth in size/number of objects over time, or comparing the last modified date to an expected value.
 
 ## Building
+
 ```
 make
 ```
 
 ## Running
+
 ```
 ./s3_exporter <flags>
 ```
 
 You can query a bucket and prefix combination by supplying them as parameters to /probe:
+
 ```
 curl localhost:9340/probe?bucket=some-bucket&prefix=some-folder/some-file.txt
 ```
 
 ### AWS Credentials
+
 The exporter creates an AWS session without any configuration. You must specify credentials yourself as documented [here](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html).
 
 Remember, if you want to load credentials from `~/.aws/config` then you need to to set:
+
 ```
 export AWS_SDK_LOAD_CONFIG=true
 ```
 
 ### Docker
+
 ```
 docker pull ribbybibby/s3-exporter
 ```
 
 You will need to supply AWS credentials to the container, as mentioned in the previous section, either by setting the appropriate environment variables with `-e`, or by mounting your `~/.aws/` directory with `-v`.
+
 ```
 # Environment variables
 docker run -p 9340:9340 -e AWS_ACCESS_KEY_ID=<value> -e AWS_SECRET_ACCESS_KEY=<value> -e AWS_REGION=<value> s3-exporter:latest <flags>
@@ -40,13 +48,22 @@ docker run -p 9340:9340 -e AWS_SDK_LOAD_CONFIG=true -e HOME=/ -v $HOME/.aws:/.aw
 ```
 
 ## Flags
-    ./s3_exporter --help
- * __`--web.listen-address`:__ The port (default ":9340").
- * __`--web.metrics-path`:__ The path metrics are exposed under (default "/metrics")
- * __`--web.probe-path`:__ The path the probe endpoint is exposed under (default "/probe")
- * __`--s3.endpoint-url`:__ A [custom endpoint URL](https://docs.aws.amazon.com/general/latest/gr/rande.html) (optional)
- * __`--s3.disable-ssl`:__ Disable SSL (default "false")
- * __`--s3.force-path-style`:__ Force path style (default "false")
+
+```
+  -h, --help                     Show context-sensitive help (also try --help-long and --help-man).
+      --web.listen-address=":9340"
+                                 Address to listen on for web interface and telemetry.
+      --web.metrics-path="/metrics"
+                                 Path under which to expose metrics
+      --web.probe-path="/probe"  Path under which to expose the probe endpoint
+      --s3.endpoint-url=""       Custom endpoint URL
+      --s3.disable-ssl           Custom disable SSL
+      --s3.force-path-style      Custom force path style
+      --log.level="info"         Only log messages with the given severity or above. Valid levels: [debug, info, warn, error, fatal]
+      --log.format="logger:stderr"
+                                 Set the log target and format. Example: "logger:syslog?appname=bob&local=7" or "logger:stdout?json=true"
+      --version                  Show application version.
+```
 
 Flags can also be set as environment variables, prefixed by `S3_EXPORTER_`. For example: `S3_EXPORTER_S3_ENDPOINT_URL=http://s3.example.local`.
 
@@ -63,31 +80,36 @@ Flags can also be set as environment variables, prefixed by `S3_EXPORTER_`. For 
 | s3_objects                         | The total number of objects.                                | bucket, prefix |
 
 ## Prometheus
+
 ### Configuration
+
 You should pass the params to a single instance of the exporter using relabelling, like so:
+
 ```yml
 scrape_configs:
-  - job_name: 's3'
+  - job_name: "s3"
     metrics_path: /probe
     static_configs:
       - targets:
-        - bucket=stuff;prefix=thing.txt;
-        - bucket=other-stuff;prefix=another-thing.gif;
+          - bucket=stuff;prefix=thing.txt;
+          - bucket=other-stuff;prefix=another-thing.gif;
     relabel_configs:
       - source_labels: [__address__]
-        regex: '^bucket=(.*);prefix=(.*);$'
-        replacement: '${1}'
-        target_label: '__param_bucket'
+        regex: "^bucket=(.*);prefix=(.*);$"
+        replacement: "${1}"
+        target_label: "__param_bucket"
       - source_labels: [__address__]
-        regex: '^bucket=(.*);prefix=(.*);$'
-        replacement: '${2}'
-        target_label: '__param_prefix'
+        regex: "^bucket=(.*);prefix=(.*);$"
+        replacement: "${2}"
+        target_label: "__param_prefix"
       - target_label: __address__
-        replacement: 127.0.0.1:9340  # S3 exporter.
-
+        replacement: 127.0.0.1:9340 # S3 exporter.
 ```
+
 ### Example Queries
+
 Return series where the last modified object date is more than 24 hours ago:
+
 ```
 (time() - s3_last_modified_object_date) / 3600 > 24
 ```
