@@ -92,8 +92,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	// Continue making requests until we've listed and compared the date of every object
 	startList := time.Now()
-	truncated := true
-	for truncated {
+	for {
 		resp, err := e.svc.ListObjectsV2(query)
 		if err != nil {
 			log.Errorln(err)
@@ -113,8 +112,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 				biggestObjectSize = *item.Size
 			}
 		}
+		if resp.NextContinuationToken == nil {
+			break
+		}
 		query.ContinuationToken = resp.NextContinuationToken
-		truncated = *resp.IsTruncated
 	}
 	listDuration := time.Now().Sub(startList).Seconds()
 
