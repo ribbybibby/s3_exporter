@@ -143,8 +143,12 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 }
 
 func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
-
 	bucket := r.URL.Query().Get("bucket")
+	if bucket == "" {
+		http.Error(w, "bucket parameter is missing", http.StatusBadRequest)
+		return
+	}
+
 	prefix := r.URL.Query().Get("prefix")
 
 	exporter := &Exporter{
