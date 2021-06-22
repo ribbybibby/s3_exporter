@@ -56,6 +56,8 @@ docker run -p 9340:9340 -e AWS_SDK_LOAD_CONFIG=true -e HOME=/ -v $HOME/.aws:/.aw
       --web.metrics-path="/metrics"
                                  Path under which to expose metrics
       --web.probe-path="/probe"  Path under which to expose the probe endpoint
+      --web.discovery-path="/discovery"
+                                 Path under which to expose service discovery
       --s3.endpoint-url=""       Custom endpoint URL
       --s3.disable-ssl           Custom disable SSL
       --s3.force-path-style      Custom force path style
@@ -83,7 +85,7 @@ Flags can also be set as environment variables, prefixed by `S3_EXPORTER_`. For 
 
 ### Configuration
 
-You should pass the params to a single instance of the exporter using relabelling, like so:
+You can pass the params to a single instance of the exporter using relabelling, like so:
 
 ```yml
 scrape_configs:
@@ -104,6 +106,47 @@ scrape_configs:
         target_label: "__param_prefix"
       - target_label: __address__
         replacement: 127.0.0.1:9340 # S3 exporter.
+```
+
+### Service Discovery
+
+Rather than defining a static list of buckets you can use the `/discovery` endpoint
+in conjunction with HTTP service discovery to discover all the buckets the
+exporter has access to.
+
+This should be all the config required to successfully scrape every bucket:
+
+```
+scrape_configs:
+  - job_name: 's3'
+    metrics_path: /probe
+    http_sd_configs:
+      - url: http://127.0.0.1:9340/discovery
+```
+
+You can limit the buckets returned with the `bucket_pattern` parameter. Refer to
+the documentation for [`path.Match`](https://golang.org/pkg/path/#Match) for the
+pattern syntax.
+
+```
+scrape_configs:
+  - job_name: 's3'
+    metrics_path: /probe
+    http_sd_configs:
+      # This will only discover buckets with a name that starts with example-
+      - url: http://127.0.0.1:9340/discovery?bucket_pattern=example-*
+```
+
+The prefix can be set too, but be mindful that this will apply to all buckets:
+
+```
+scrape_configs:
+  - job_name: 's3'
+    metrics_path: /probe
+    http_sd_configs:
+      - url: http://127.0.0.1:9340/discovery?bucket_pattern=example-*
+    params:
+      prefix: ["thing.txt"]
 ```
 
 ### Example Queries

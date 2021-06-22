@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -165,6 +167,52 @@ func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 	h.ServeHTTP(w, r)
 }
 
+type discoveryTarget struct {
+	Targets []string          `json:"targets"`
+	Labels  map[string]string `json:"labels"`
+}
+
+func discoveryHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
+	// If a bucket pattern isn't specified, then return every bucket
+	bucketPattern := r.URL.Query().Get("bucket_pattern")
+	if bucketPattern == "" {
+		bucketPattern = "*"
+	}
+
+	result, err := svc.ListBuckets(&s3.ListBucketsInput{})
+	if err != nil {
+		http.Error(w, "error listing buckets", http.StatusInternalServerError)
+		return
+	}
+
+	targets := []discoveryTarget{}
+	for _, b := range result.Buckets {
+		name := aws.StringValue(b.Name)
+
+		matched, err := path.Match(bucketPattern, name)
+		if err != nil {
+			http.Error(w, "bad pattern provided for 'bucket_pattern'", http.StatusBadRequest)
+		}
+		if matched {
+			t := discoveryTarget{
+				Targets: []string{r.Host},
+				Labels: map[string]string{
+					"__param_bucket": name,
+				},
+			}
+			targets = append(targets, t)
+		}
+	}
+
+	data, err := json.Marshal(targets)
+	if err != nil {
+		http.Error(w, "error marshalling json", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
 func init() {
 	prometheus.MustRegister(version.NewCollector(namespace + "_exporter"))
 }
@@ -175,6 +223,7 @@ func main() {
 		listenAddress  = app.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9340").String()
 		metricsPath    = app.Flag("web.metrics-path", "Path under which to expose metrics").Default("/metrics").String()
 		probePath      = app.Flag("web.probe-path", "Path under which to expose the probe endpoint").Default("/probe").String()
+		discoveryPath  = app.Flag("web.discovery-path", "Path under which to expose service discovery").Default("/discovery").String()
 		endpointURL    = app.Flag("s3.endpoint-url", "Custom endpoint URL").Default("").String()
 		disableSSL     = app.Flag("s3.disable-ssl", "Custom disable SSL").Bool()
 		forcePathStyle = app.Flag("s3.force-path-style", "Custom force path style").Bool()
@@ -210,6 +259,9 @@ func main() {
 	http.HandleFunc(*probePath, func(w http.ResponseWriter, r *http.Request) {
 		probeHandler(w, r, svc)
 	})
+	http.HandleFunc(*discoveryPath, func(w http.ResponseWriter, r *http.Request) {
+		discoveryHandler(w, r, svc)
+	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
 						 <head><title>AWS S3 Exporter</title></head>
@@ -217,6 +269,7 @@ func main() {
 						 <h1>AWS S3 Exporter</h1>
 						 <p><a href="` + *probePath + `?bucket=BUCKET&prefix=PREFIX">Query metrics for objects in BUCKET that match PREFIX</a></p>
 						 <p><a href='` + *metricsPath + `'>Metrics</a></p>
+						 <p><a href='` + *discoveryPath + `'>Service Discovery</a></p>
 						 </body>
 						 </html>`))
 	})
