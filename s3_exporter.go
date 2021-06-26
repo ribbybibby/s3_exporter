@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"path"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -173,14 +172,9 @@ type discoveryTarget struct {
 }
 
 func discoveryHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
-	// If a bucket pattern isn't specified, then return every bucket
-	bucketPattern := r.URL.Query().Get("bucket_pattern")
-	if bucketPattern == "" {
-		bucketPattern = "*"
-	}
-
 	result, err := svc.ListBuckets(&s3.ListBucketsInput{})
 	if err != nil {
+		log.Errorln(err)
 		http.Error(w, "error listing buckets", http.StatusInternalServerError)
 		return
 	}
@@ -188,12 +182,7 @@ func discoveryHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API)
 	targets := []discoveryTarget{}
 	for _, b := range result.Buckets {
 		name := aws.StringValue(b.Name)
-
-		matched, err := path.Match(bucketPattern, name)
-		if err != nil {
-			http.Error(w, "bad pattern provided for 'bucket_pattern'", http.StatusBadRequest)
-		}
-		if matched {
+		if name != "" {
 			t := discoveryTarget{
 				Targets: []string{r.Host},
 				Labels: map[string]string{

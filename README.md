@@ -116,35 +116,37 @@ exporter has access to.
 
 This should be all the config required to successfully scrape every bucket:
 
-```
+```yml
 scrape_configs:
-  - job_name: 's3'
+  - job_name: "s3"
     metrics_path: /probe
     http_sd_configs:
       - url: http://127.0.0.1:9340/discovery
 ```
 
-You can limit the buckets returned with the `bucket_pattern` parameter. Refer to
-the documentation for [`path.Match`](https://golang.org/pkg/path/#Match) for the
-pattern syntax.
+Use `relabel_configs` to select the buckets you want to scrape:
 
-```
+```yml
 scrape_configs:
-  - job_name: 's3'
+  - job_name: "s3"
     metrics_path: /probe
     http_sd_configs:
-      # This will only discover buckets with a name that starts with example-
-      - url: http://127.0.0.1:9340/discovery?bucket_pattern=example-*
+      - url: http://127.0.0.1:9340/discovery
+    relabel_configs:
+      # Keep buckets that start with example-
+      - source_labels: [__param_bucket]
+        action: keep
+        regex: ^example-.*
 ```
 
 The prefix can be set too, but be mindful that this will apply to all buckets:
 
-```
+```yml
 scrape_configs:
-  - job_name: 's3'
+  - job_name: "s3"
     metrics_path: /probe
     http_sd_configs:
-      - url: http://127.0.0.1:9340/discovery?bucket_pattern=example-*
+      - url: http://127.0.0.1:9340/discovery
     params:
       prefix: ["thing.txt"]
 ```
