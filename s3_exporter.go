@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,45 +27,46 @@ var (
 	s3ListSuccess = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "list_success"),
 		"If the ListObjects operation was a success",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "storage_class"}, nil,
 	)
 	s3ListDuration = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "list_duration_seconds"),
 		"The total duration of the list operation",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "storage_class"}, nil,
 	)
 	s3LastModifiedObjectDate = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "last_modified_object_date"),
 		"The last modified date of the object that was modified most recently",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "storage_class"}, nil,
 	)
 	s3LastModifiedObjectSize = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "last_modified_object_size_bytes"),
 		"The size of the object that was modified most recently",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "storage_class"}, nil,
 	)
 	s3ObjectTotal = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "objects"),
 		"The total number of objects for the bucket/prefix combination",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "storage_class"}, nil,
 	)
 	s3SumSize = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "objects_size_sum_bytes"),
 		"The total size of all objects summed",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "storage_class"}, nil,
 	)
 	s3BiggestSize = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "biggest_object_size_bytes"),
 		"The size of the biggest object",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "storage_class"}, nil,
 	)
 )
 
 // Exporter is our exporter type
 type Exporter struct {
-	bucket string
-	prefix string
-	svc    s3iface.S3API
+	bucket       string
+	prefixes     []string
+	svc          s3iface.S3API
+	storageclass string
 }
 
 // Describe all the metrics we export
@@ -80,82 +82,142 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect metrics
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	var lastModified time.Time
-	var numberOfObjects float64
-	var totalSize int64
-	var biggestObjectSize int64
-	var lastObjectSize int64
+	log.Infoln("Bucket: ", e.bucket)
 
-	query := &s3.ListObjectsV2Input{
-		Bucket: &e.bucket,
-		Prefix: &e.prefix,
-	}
+	for _, prefix := range e.prefixes {
+		var lastModified time.Time
+		var numberOfObjects float64
+		var totalSize int64
+		var biggestObjectSize int64
+		var lastObjectSize int64
 
-	// Continue making requests until we've listed and compared the date of every object
-	startList := time.Now()
-	for {
-		resp, err := e.svc.ListObjectsV2(query)
-		if err != nil {
-			log.Errorln(err)
-			ch <- prometheus.MustNewConstMetric(
-				s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix,
-			)
-			return
+		log.Infoln("Prefix: ", prefix)
+
+		labels := []string{e.bucket, prefix}
+
+		if e.storageclass != "" {
+			labels = append(labels, e.storageclass)
+		} else {
+			labels = append(labels, "*")
 		}
-		for _, item := range resp.Contents {
-			numberOfObjects++
-			totalSize = totalSize + *item.Size
-			if item.LastModified.After(lastModified) {
-				lastModified = *item.LastModified
-				lastObjectSize = *item.Size
+
+		query := &s3.ListObjectsV2Input{
+			Bucket: &e.bucket,
+			Prefix: &prefix,
+		}
+
+		// Continue making requests until we've listed and compared the date of every object
+		startList := time.Now()
+		for {
+			resp, err := e.svc.ListObjectsV2(query)
+			if err != nil {
+				log.Errorln(err)
+				ch <- prometheus.MustNewConstMetric(
+					s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, prefix,
+				)
+				return
 			}
-			if *item.Size > biggestObjectSize {
-				biggestObjectSize = *item.Size
-			}
-		}
-		if resp.NextContinuationToken == nil {
-			break
-		}
-		query.ContinuationToken = resp.NextContinuationToken
-	}
-	listDuration := time.Now().Sub(startList).Seconds()
+			for _, item := range resp.Contents {
+				if e.storageclass != "" &&
+					*item.StorageClass != e.storageclass {
+					log.Debugf("Filter out %s: %s != %s\n",
+						*item.Key,
+						*item.StorageClass,
+						e.storageclass)
 
-	ch <- prometheus.MustNewConstMetric(
-		s3ListSuccess, prometheus.GaugeValue, 1, e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3ListDuration, prometheus.GaugeValue, listDuration, e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3BiggestSize, prometheus.GaugeValue, float64(biggestObjectSize), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3SumSize, prometheus.GaugeValue, float64(totalSize), e.bucket, e.prefix,
-	)
+					continue
+				}
+
+				numberOfObjects++
+				totalSize = totalSize + *item.Size
+				if item.LastModified.After(lastModified) {
+					lastModified = *item.LastModified
+					lastObjectSize = *item.Size
+				}
+				if *item.Size > biggestObjectSize {
+					biggestObjectSize = *item.Size
+				}
+			}
+			if resp.NextContinuationToken == nil {
+				break
+			}
+			query.ContinuationToken = resp.NextContinuationToken
+		}
+		listDuration := time.Now().Sub(startList).Seconds()
+
+		ch <- prometheus.MustNewConstMetric(
+			s3ListSuccess, prometheus.GaugeValue, 1, labels...,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3ListDuration, prometheus.GaugeValue, listDuration, labels...,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), labels...,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), labels...,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, labels...,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3BiggestSize, prometheus.GaugeValue, float64(biggestObjectSize), labels...,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3SumSize, prometheus.GaugeValue, float64(totalSize), labels...,
+		)
+	}
 }
 
-func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
+func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API, cfgBucket string, cfgPrefixes string, cfgStorageClass string) {
 	bucket := r.URL.Query().Get("bucket")
-	if bucket == "" {
+
+	if bucket == "" && cfgBucket == "" {
 		http.Error(w, "bucket parameter is missing", http.StatusBadRequest)
 		return
 	}
 
-	prefix := r.URL.Query().Get("prefix")
+	var bucketName = cfgBucket
+
+	if bucket != "" {
+		log.Infoln("Use provided bucket in query", bucket)
+		bucketName = bucket
+	} else {
+		log.Infoln("Use statically set bucket", cfgBucket)
+	}
+
+	queryString := r.URL.Query()
+	prefixesArg := queryString.Get("prefixes")
+	prefixArg := queryString.Get("prefix")
+	storageclassArg := queryString.Get("storageclass")
+
+	var prefixes []string
+
+	if prefixesArg != "" {
+		log.Infoln("Use provided prefixes in query", prefixesArg)
+		prefixes = strings.Split(prefixesArg, ",")
+	} else if prefixArg != "" {
+		log.Infoln("Use provided single prefix in query", prefixArg)
+		prefixes = append(prefixes, prefixArg)
+	} else if cfgPrefixes != "" {
+		log.Infoln("Use statically set prefixes", cfgPrefixes)
+		prefixes = strings.Split(cfgPrefixes, ",")
+	} else {
+		log.Infoln("Use empty prefixes", cfgBucket)
+		prefixes = append(prefixes, "")
+	}
+
+	storageclass := storageclassArg
+
+	if storageclass == "" && cfgStorageClass != "" {
+		storageclass = cfgStorageClass
+	}
 
 	exporter := &Exporter{
-		bucket: bucket,
-		prefix: prefix,
-		svc:    svc,
+		bucket:       bucketName,
+		prefixes:     prefixes,
+		svc:          svc,
+		storageclass: storageclass,
 	}
 
 	registry := prometheus.NewRegistry()
@@ -216,6 +278,9 @@ func main() {
 		endpointURL    = app.Flag("s3.endpoint-url", "Custom endpoint URL").Default("").String()
 		disableSSL     = app.Flag("s3.disable-ssl", "Custom disable SSL").Bool()
 		forcePathStyle = app.Flag("s3.force-path-style", "Custom force path style").Bool()
+		bucket         = app.Flag("s3.bucket", "Define statically the bucket to monitor").Default("").String()
+		prefixes       = app.Flag("s3.prefixes", "Define statically the prefixes to monitor").Default("").String()
+		storageclass   = app.Flag("s3.storageclass", "Define statically the storage class to monitor").Default("").String()
 	)
 
 	log.AddFlags(app)
@@ -244,9 +309,13 @@ func main() {
 	log.Infoln("Starting "+namespace+"_exporter", version.Info())
 	log.Infoln("Build context", version.BuildContext())
 
+	log.Infoln("- Bucket", *bucket)
+	log.Infoln("- Prefixes", *prefixes)
+	log.Infoln("- StorageClass", *storageclass)
+
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc(*probePath, func(w http.ResponseWriter, r *http.Request) {
-		probeHandler(w, r, svc)
+		probeHandler(w, r, svc, *bucket, *prefixes, *storageclass)
 	})
 	http.HandleFunc(*discoveryPath, func(w http.ResponseWriter, r *http.Request) {
 		discoveryHandler(w, r, svc)

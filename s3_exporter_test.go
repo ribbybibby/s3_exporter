@@ -12,6 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
+var StorageClassStandard = "STANDARD"
+var StorageClassGlacier = "GLACIER"
+
 var (
 	mockSvc   = &mockS3Client{}
 	testCases = s3ExporterTestCases{
@@ -21,12 +24,12 @@ var (
 			Bucket: "mock",
 			Prefix: "one",
 			ExpectedOutputLines: []string{
-				"s3_list_success{bucket=\"mock\",prefix=\"one\"} 1",
-				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"one\"} 1.5604596e+09",
-				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
-				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
-				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
-				"s3_objects{bucket=\"mock\",prefix=\"one\"} 1",
+				"s3_list_success{bucket=\"mock\",prefix=\"one\",storage_class=\"*\"} 1",
+				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"one\",storage_class=\"*\"} 1.5604596e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"one\",storage_class=\"*\"} 1234",
+				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"one\",storage_class=\"*\"} 1234",
+				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"one\",storage_class=\"*\"} 1234",
+				"s3_objects{bucket=\"mock\",prefix=\"one\",storage_class=\"*\"} 1",
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
@@ -49,12 +52,12 @@ var (
 			Bucket: "mock",
 			Prefix: "none",
 			ExpectedOutputLines: []string{
-				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"none\"} 0",
-				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"none\"} -6.795364578e+09",
-				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"none\"} 0",
-				"s3_list_success{bucket=\"mock\",prefix=\"none\"} 1",
-				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"none\"} 0",
-				"s3_objects{bucket=\"mock\",prefix=\"none\"} 0",
+				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"none\",storage_class=\"*\"} 0",
+				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"none\",storage_class=\"*\"} -6.795364578e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"none\",storage_class=\"*\"} 0",
+				"s3_list_success{bucket=\"mock\",prefix=\"none\",storage_class=\"*\"} 1",
+				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"none\",storage_class=\"*\"} 0",
+				"s3_objects{bucket=\"mock\",prefix=\"none\",storage_class=\"*\"} 0",
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents:    []*s3.Object{},
@@ -71,12 +74,12 @@ var (
 			Bucket: "mock",
 			Prefix: "multiple",
 			ExpectedOutputLines: []string{
-				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"multiple\"} 4567",
-				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"multiple\"} 1.568592e+09",
-				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"multiple\"} 4567",
-				"s3_list_success{bucket=\"mock\",prefix=\"multiple\"} 1",
-				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"multiple\"} 11602",
-				"s3_objects{bucket=\"mock\",prefix=\"multiple\"} 4",
+				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"multiple\",storage_class=\"*\"} 4567",
+				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"multiple\",storage_class=\"*\"} 1.568592e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"multiple\",storage_class=\"*\"} 4567",
+				"s3_list_success{bucket=\"mock\",prefix=\"multiple\",storage_class=\"*\"} 1",
+				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"multiple\",storage_class=\"*\"} 11602",
+				"s3_objects{bucket=\"mock\",prefix=\"multiple\",storage_class=\"*\"} 4",
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
@@ -108,6 +111,60 @@ var (
 				Prefix:      String("multiple"),
 			},
 		},
+		// Test with storage class filter
+		s3ExporterTestCase{
+			Name:         "storage class filter",
+			Bucket:       "mock",
+			Prefix:       "storageclass_filter",
+			StorageClass: StorageClassStandard,
+			ExpectedOutputLines: []string{
+				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"storageclass_filter\",storage_class=\"STANDARD\"} 4567",
+				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"storageclass_filter\",storage_class=\"STANDARD\"} 1.568592e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"storageclass_filter\",storage_class=\"STANDARD\"} 4567",
+				"s3_list_success{bucket=\"mock\",prefix=\"storageclass_filter\",storage_class=\"STANDARD\"} 1",
+				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"storageclass_filter\",storage_class=\"STANDARD\"} 11602",
+				"s3_objects{bucket=\"mock\",prefix=\"storageclass_filter\",storage_class=\"STANDARD\"} 4",
+			},
+			ListObjectsV2Response: &s3.ListObjectsV2Output{
+				Contents: []*s3.Object{
+					&s3.Object{
+						Key:          String("storageclass_filter0"),
+						LastModified: Time(time.Date(2019, time.June, 13, 21, 0, 0, 0, time.UTC)),
+						Size:         Int64(1234),
+						StorageClass: &StorageClassStandard,
+					},
+					&s3.Object{
+						Key:          String("storageclass_filter1"),
+						LastModified: Time(time.Date(2019, time.July, 14, 22, 0, 0, 0, time.UTC)),
+						Size:         Int64(2345),
+						StorageClass: &StorageClassStandard,
+					},
+					&s3.Object{
+						Key:          String("storageclass_filter2"),
+						LastModified: Time(time.Date(2019, time.August, 15, 23, 0, 0, 0, time.UTC)),
+						Size:         Int64(3456),
+						StorageClass: &StorageClassStandard,
+					},
+					&s3.Object{
+						Key:          String("storageclass_filter/0"),
+						LastModified: Time(time.Date(2019, time.September, 16, 00, 0, 0, 0, time.UTC)),
+						Size:         Int64(4567),
+						StorageClass: &StorageClassStandard,
+					},
+					&s3.Object{
+						Key:          String("storageclass_filter/archived"),
+						LastModified: Time(time.Date(2019, time.September, 16, 00, 0, 0, 0, time.UTC)),
+						Size:         Int64(4567),
+						StorageClass: &StorageClassGlacier,
+					},
+				},
+				IsTruncated: Bool(false),
+				KeyCount:    Int64(4),
+				MaxKeys:     Int64(1000),
+				Name:        String("mock"),
+				Prefix:      String("storageclass_filter"),
+			},
+		},
 	}
 )
 
@@ -119,6 +176,7 @@ type s3ExporterTestCase struct {
 	Name                  string
 	Bucket                string
 	Prefix                string
+	StorageClass          string
 	ExpectedOutputLines   []string
 	ListObjectsV2Response *s3.ListObjectsV2Output
 }
@@ -149,7 +207,7 @@ func (tcs *s3ExporterTestCases) response(bucket, prefix string) (*s3.ListObjects
 // TestProbeHandler iterates over a list of test cases
 func TestProbeHandler(t *testing.T) {
 	for _, c := range testCases {
-		rr, err := probe(c.Bucket, c.Prefix)
+		rr, err := probe(c.Bucket, c.Prefix, c.StorageClass)
 		if err != nil {
 			t.Errorf(err.Error())
 		}
@@ -169,14 +227,17 @@ func (m *mockS3Client) ListObjectsV2(input *s3.ListObjectsV2Input) (*s3.ListObje
 }
 
 // Repeatable probe function
-func probe(bucket, prefix string) (rr *httptest.ResponseRecorder, err error) {
-	var uri string
+func probe(bucket, prefix, storageclass string) (rr *httptest.ResponseRecorder, err error) {
+	var uri string = "/probe?bucket=" + bucket
 
 	if len(prefix) > 0 {
-		uri = "/probe?bucket=" + bucket + "&prefix=" + prefix
-	} else {
-		uri = "/probe?bucket=" + bucket
+		uri = uri + "&prefix=" + prefix
 	}
+
+	if len(storageclass) > 0 {
+		uri = uri + "&storageclass=" + storageclass
+	}
+
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		return
@@ -184,7 +245,7 @@ func probe(bucket, prefix string) (rr *httptest.ResponseRecorder, err error) {
 
 	rr = httptest.NewRecorder()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		probeHandler(w, r, mockSvc)
+		probeHandler(w, r, mockSvc, "", "", "")
 	})
 
 	handler.ServeHTTP(rr, req)
