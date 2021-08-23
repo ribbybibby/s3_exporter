@@ -71,15 +71,40 @@ Flags can also be set as environment variables, prefixed by `S3_EXPORTER_`. For 
 
 ## Metrics
 
-| Metric                             | Meaning                                                     | Labels         |
-| ---------------------------------- | ----------------------------------------------------------- | -------------- |
-| s3_biggest_object_size_bytes       | The size of the largest object.                             | bucket, prefix |
-| s3_last_modified_object_date       | The modification date of the most recently modified object. | bucket, prefix |
-| s3_last_modified_object_size_bytes | The size of the object that was modified most recently.     | bucket, prefix |
-| s3_list_duration_seconds           | The duration of the ListObjects operation                   | bucket, prefix |
-| s3_list_success                    | Did the ListObjects operation complete successfully?        | bucket, prefix |
-| s3_objects_size_sum_bytes          | The sum of the size of all the objects.                     | bucket, prefix |
-| s3_objects                         | The total number of objects.                                | bucket, prefix |
+| Metric                             | Meaning                                                                                                     | Labels                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------- |
+| s3_biggest_object_size_bytes       | The size of the largest object.                                                                             | bucket, prefix            |
+| s3_common_prefixes                 | A count of all the keys between the prefix and the next occurrence of the string specified by the delimiter | bucket, prefix, delimiter |
+| s3_last_modified_object_date       | The modification date of the most recently modified object.                                                 | bucket, prefix            |
+| s3_last_modified_object_size_bytes | The size of the object that was modified most recently.                                                     | bucket, prefix            |
+| s3_list_duration_seconds           | The duration of the ListObjects operation                                                                   | bucket, prefix, delimiter |
+| s3_list_success                    | Did the ListObjects operation complete successfully?                                                        | bucket, prefix, delimiter |
+| s3_objects_size_sum_bytes          | The sum of the size of all the objects.                                                                     | bucket, prefix            |
+| s3_objects                         | The total number of objects.                                                                                | bucket, prefix            |
+
+## Common prefixes
+
+Rather than generating metrics for the objects with a particular prefix, you can
+set the `delimiter` parameter to produce a count of all the keys between the
+prefix and the next occurrence of the given delimiter.
+
+For instance:
+```
+$ curl 'localhost:9340/probe?bucket=registry-bucket&prefix=docker/registry/v2/blobs/sha256/&delimiter=/'
+# HELP s3_common_prefixes A count of all the keys between the prefix and the next occurrence of the string specified by the delimiter
+# TYPE s3_common_prefixes gauge
+s3_common_prefixes{bucket="registry-bucket",delimiter="/",prefix="docker/registry/v2/blobs/sha256/"} 133
+# HELP s3_list_duration_seconds The total duration of the list operation
+# TYPE s3_list_duration_seconds gauge
+s3_list_duration_seconds{bucket="registry-bucket",delimiter="/",prefix="docker/registry/v2/blobs/sha256/"} 0.921488535
+# HELP s3_list_success If the ListObjects operation was a success
+# TYPE s3_list_success gauge
+s3_list_success{bucket="registry-bucket",delimiter="/",prefix="docker/registry/v2/blobs/sha256/"} 1
+```
+
+See [this
+page](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ListingKeysUsingAPIs.html)
+for more information.
 
 ## Prometheus
 

@@ -26,12 +26,12 @@ var (
 	s3ListSuccess = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "list_success"),
 		"If the ListObjects operation was a success",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "delimiter"}, nil,
 	)
 	s3ListDuration = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "list_duration_seconds"),
 		"The total duration of the list operation",
-		[]string{"bucket", "prefix"}, nil,
+		[]string{"bucket", "prefix", "delimiter"}, nil,
 	)
 	s3LastModifiedObjectDate = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "last_modified_object_date"),
@@ -58,24 +58,34 @@ var (
 		"The size of the biggest object",
 		[]string{"bucket", "prefix"}, nil,
 	)
+	s3CommonPrefixes = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "common_prefixes"),
+		"A count of all the keys between the prefix and the next occurrence of the string specified by the delimiter",
+		[]string{"bucket", "prefix", "delimiter"}, nil,
+	)
 )
 
 // Exporter is our exporter type
 type Exporter struct {
-	bucket string
-	prefix string
-	svc    s3iface.S3API
+	bucket    string
+	prefix    string
+	delimiter string
+	svc       s3iface.S3API
 }
 
 // Describe all the metrics we export
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s3ListSuccess
 	ch <- s3ListDuration
-	ch <- s3LastModifiedObjectDate
-	ch <- s3LastModifiedObjectSize
-	ch <- s3ObjectTotal
-	ch <- s3SumSize
-	ch <- s3BiggestSize
+	if e.delimiter == "" {
+		ch <- s3LastModifiedObjectDate
+		ch <- s3LastModifiedObjectSize
+		ch <- s3ObjectTotal
+		ch <- s3SumSize
+		ch <- s3BiggestSize
+	} else {
+		ch <- s3CommonPrefixes
+	}
 }
 
 // Collect metrics
@@ -85,10 +95,12 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	var totalSize int64
 	var biggestObjectSize int64
 	var lastObjectSize int64
+	var commonPrefixes int
 
 	query := &s3.ListObjectsV2Input{
-		Bucket: &e.bucket,
-		Prefix: &e.prefix,
+		Bucket:    aws.String(e.bucket),
+		Prefix:    aws.String(e.prefix),
+		Delimiter: aws.String(e.delimiter),
 	}
 
 	// Continue making requests until we've listed and compared the date of every object
@@ -102,6 +114,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			)
 			return
 		}
+		commonPrefixes = commonPrefixes + len(resp.CommonPrefixes)
 		for _, item := range resp.Contents {
 			numberOfObjects++
 			totalSize = totalSize + *item.Size
@@ -121,26 +134,32 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	listDuration := time.Now().Sub(startList).Seconds()
 
 	ch <- prometheus.MustNewConstMetric(
-		s3ListSuccess, prometheus.GaugeValue, 1, e.bucket, e.prefix,
+		s3ListSuccess, prometheus.GaugeValue, 1, e.bucket, e.prefix, e.delimiter,
 	)
 	ch <- prometheus.MustNewConstMetric(
-		s3ListDuration, prometheus.GaugeValue, listDuration, e.bucket, e.prefix,
+		s3ListDuration, prometheus.GaugeValue, listDuration, e.bucket, e.prefix, e.delimiter,
 	)
-	ch <- prometheus.MustNewConstMetric(
-		s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3BiggestSize, prometheus.GaugeValue, float64(biggestObjectSize), e.bucket, e.prefix,
-	)
-	ch <- prometheus.MustNewConstMetric(
-		s3SumSize, prometheus.GaugeValue, float64(totalSize), e.bucket, e.prefix,
-	)
+	if e.delimiter == "" {
+		ch <- prometheus.MustNewConstMetric(
+			s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), e.bucket, e.prefix,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), e.bucket, e.prefix,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, e.bucket, e.prefix,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3BiggestSize, prometheus.GaugeValue, float64(biggestObjectSize), e.bucket, e.prefix,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			s3SumSize, prometheus.GaugeValue, float64(totalSize), e.bucket, e.prefix,
+		)
+	} else {
+		ch <- prometheus.MustNewConstMetric(
+			s3CommonPrefixes, prometheus.GaugeValue, float64(commonPrefixes), e.bucket, e.prefix, e.delimiter,
+		)
+	}
 }
 
 func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
@@ -151,11 +170,13 @@ func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 	}
 
 	prefix := r.URL.Query().Get("prefix")
+	delimiter := r.URL.Query().Get("delimiter")
 
 	exporter := &Exporter{
-		bucket: bucket,
-		prefix: prefix,
-		svc:    svc,
+		bucket:    bucket,
+		prefix:    prefix,
+		delimiter: delimiter,
+		svc:       svc,
 	}
 
 	registry := prometheus.NewRegistry()

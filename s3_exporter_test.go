@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
@@ -21,7 +22,7 @@ var (
 			Bucket: "mock",
 			Prefix: "one",
 			ExpectedOutputLines: []string{
-				"s3_list_success{bucket=\"mock\",prefix=\"one\"} 1",
+				"s3_list_success{bucket=\"mock\",delimiter=\"\",prefix=\"one\"} 1",
 				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"one\"} 1.5604596e+09",
 				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
 				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"one\"} 1234",
@@ -52,7 +53,7 @@ var (
 				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"none\"} 0",
 				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"none\"} -6.795364578e+09",
 				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"none\"} 0",
-				"s3_list_success{bucket=\"mock\",prefix=\"none\"} 1",
+				"s3_list_success{bucket=\"mock\",delimiter=\"\",prefix=\"none\"} 1",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"none\"} 0",
 				"s3_objects{bucket=\"mock\",prefix=\"none\"} 0",
 			},
@@ -74,7 +75,7 @@ var (
 				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"multiple\"} 4567",
 				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"multiple\"} 1.568592e+09",
 				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"multiple\"} 4567",
-				"s3_list_success{bucket=\"mock\",prefix=\"multiple\"} 1",
+				"s3_list_success{bucket=\"mock\",delimiter=\"\",prefix=\"multiple\"} 1",
 				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"multiple\"} 11602",
 				"s3_objects{bucket=\"mock\",prefix=\"multiple\"} 4",
 			},
@@ -108,6 +109,32 @@ var (
 				Prefix:      String("multiple"),
 			},
 		},
+		// Test delimiter
+		s3ExporterTestCase{
+			Name:      "common prefixes",
+			Bucket:    "mock",
+			Prefix:    "mock-prefix",
+			Delimiter: "/",
+			ExpectedOutputLines: []string{
+				"s3_list_success{bucket=\"mock\",delimiter=\"/\",prefix=\"mock-prefix\"} 1",
+				"s3_common_prefixes{bucket=\"mock\",delimiter=\"/\",prefix=\"mock-prefix\"} 3",
+			},
+			ListObjectsV2Response: &s3.ListObjectsV2Output{
+				Name:   aws.String("mock"),
+				Prefix: aws.String("mock-prefix"),
+				CommonPrefixes: []*s3.CommonPrefix{
+					{
+						Prefix: aws.String("one"),
+					},
+					{
+						Prefix: aws.String("two"),
+					},
+					{
+						Prefix: aws.String("three"),
+					},
+				},
+			},
+		},
 	}
 )
 
@@ -119,6 +146,7 @@ type s3ExporterTestCase struct {
 	Name                  string
 	Bucket                string
 	Prefix                string
+	Delimiter             string
 	ExpectedOutputLines   []string
 	ListObjectsV2Response *s3.ListObjectsV2Output
 }
@@ -149,7 +177,7 @@ func (tcs *s3ExporterTestCases) response(bucket, prefix string) (*s3.ListObjects
 // TestProbeHandler iterates over a list of test cases
 func TestProbeHandler(t *testing.T) {
 	for _, c := range testCases {
-		rr, err := probe(c.Bucket, c.Prefix)
+		rr, err := probe(c.Bucket, c.Prefix, c.Delimiter)
 		if err != nil {
 			t.Errorf(err.Error())
 		}
@@ -169,13 +197,13 @@ func (m *mockS3Client) ListObjectsV2(input *s3.ListObjectsV2Input) (*s3.ListObje
 }
 
 // Repeatable probe function
-func probe(bucket, prefix string) (rr *httptest.ResponseRecorder, err error) {
-	var uri string
-
+func probe(bucket, prefix, delimiter string) (rr *httptest.ResponseRecorder, err error) {
+	uri := "/probe?bucket=" + bucket
 	if len(prefix) > 0 {
-		uri = "/probe?bucket=" + bucket + "&prefix=" + prefix
-	} else {
-		uri = "/probe?bucket=" + bucket
+		uri = uri + "&prefix=" + prefix
+	}
+	if len(delimiter) > 0 {
+		uri = uri + "&delimiter=" + delimiter
 	}
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
