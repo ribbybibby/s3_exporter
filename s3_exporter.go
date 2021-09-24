@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,6 +54,11 @@ var (
 		"The total size of all objects summed",
 		[]string{"bucket", "prefix"}, nil,
 	)
+	s3SumSizeList = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "objects_size_list_sum_bytes"),
+		"The total size of each object / prefix summed",
+		[]string{"bucket", "prefix"}, nil,
+	)
 	s3BiggestSize = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "biggest_object_size_bytes"),
 		"The size of the biggest object",
@@ -70,6 +76,7 @@ type Exporter struct {
 	bucket    string
 	prefix    string
 	delimiter string
+	expand    bool
 	svc       s3iface.S3API
 }
 
@@ -96,6 +103,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	var biggestObjectSize int64
 	var lastObjectSize int64
 	var commonPrefixes int
+	expandedPrefixSize := make(map[string]int64)
 
 	query := &s3.ListObjectsV2Input{
 		Bucket:    aws.String(e.bucket),
@@ -124,6 +132,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			}
 			if *item.Size > biggestObjectSize {
 				biggestObjectSize = *item.Size
+			}
+			if e.expand {
+				topLevelKey := strings.Split(strings.TrimPrefix(*item.Key, *resp.Prefix), "/")[0]
+				expandedPrefixSize[*resp.Prefix+topLevelKey] += *item.Size
 			}
 		}
 		if resp.NextContinuationToken == nil {
@@ -160,6 +172,13 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			s3CommonPrefixes, prometheus.GaugeValue, float64(commonPrefixes), e.bucket, e.prefix, e.delimiter,
 		)
 	}
+	if e.expand {
+		for key, size := range expandedPrefixSize {
+			ch <- prometheus.MustNewConstMetric(
+				s3SumSizeList, prometheus.GaugeValue, float64(size), e.bucket, key,
+			)
+		}
+	}
 }
 
 func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
@@ -172,9 +191,17 @@ func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 	prefix := r.URL.Query().Get("prefix")
 	delimiter := r.URL.Query().Get("delimiter")
 
+	// expand items under prefix
+	// TODO: replace with `*/..*` to allow control on the level of expansions
+	var expand bool
+	expandFlag := r.URL.Query().Get("expand")
+	if strings.ToLower(expandFlag) == "true" {
+		expand = true
+	}
 	exporter := &Exporter{
 		bucket:    bucket,
 		prefix:    prefix,
+		expand:    expand,
 		delimiter: delimiter,
 		svc:       svc,
 	}

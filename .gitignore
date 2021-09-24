@@ -1,3 +1,4 @@
 s3_exporter
 bin/**
 *.tar.gz
+.idea/

@@ -16,6 +16,54 @@ import (
 var (
 	mockSvc   = &mockS3Client{}
 	testCases = s3ExporterTestCases{
+		// Test wildcard
+		s3ExporterTestCase{
+			Name:   "wildcard suffix to list all prefix or objects under the prefix",
+			Bucket: "mock",
+			Prefix: "mock-prefix-wildcard",
+			Expand: true,
+			ExpectedOutputLines: []string{
+				"s3_biggest_object_size_bytes{bucket=\"mock\",prefix=\"mock-prefix-wildcard\"} 4567",
+				"s3_last_modified_object_date{bucket=\"mock\",prefix=\"mock-prefix-wildcard\"} 1.568592e+09",
+				"s3_last_modified_object_size_bytes{bucket=\"mock\",prefix=\"mock-prefix-wildcard\"} 4567",
+				"s3_list_success{bucket=\"mock\",delimiter=\"\",prefix=\"mock-prefix-wildcard\"} 1",
+				"s3_objects_size_sum_bytes{bucket=\"mock\",prefix=\"mock-prefix-wildcard\"} 11602",
+				"s3_objects_size_list_sum_bytes{bucket=\"mock\",prefix=\"mock-prefix-wildcard/multiple0\"} 1234",
+				"s3_objects_size_list_sum_bytes{bucket=\"mock\",prefix=\"mock-prefix-wildcard/multiple1\"} 2345",
+				"s3_objects_size_list_sum_bytes{bucket=\"mock\",prefix=\"mock-prefix-wildcard/multiple2\"} 3456",
+				"s3_objects_size_list_sum_bytes{bucket=\"mock\",prefix=\"mock-prefix-wildcard/multiple\"} 4567",
+				"s3_objects{bucket=\"mock\",prefix=\"mock-prefix-wildcard\"} 4",
+			},
+			ListObjectsV2Response: &s3.ListObjectsV2Output{
+				Name:   aws.String("mock"),
+				Prefix: aws.String("mock-prefix-wildcard/"),
+				Contents: []*s3.Object{
+					&s3.Object{
+						Key:          String("mock-prefix-wildcard/multiple0"),
+						LastModified: Time(time.Date(2019, time.June, 13, 21, 0, 0, 0, time.UTC)),
+						Size:         Int64(1234),
+					},
+					&s3.Object{
+						Key:          String("mock-prefix-wildcard/multiple1"),
+						LastModified: Time(time.Date(2019, time.July, 14, 22, 0, 0, 0, time.UTC)),
+						Size:         Int64(2345),
+					},
+					&s3.Object{
+						Key:          String("mock-prefix-wildcard/multiple2"),
+						LastModified: Time(time.Date(2019, time.August, 15, 23, 0, 0, 0, time.UTC)),
+						Size:         Int64(3456),
+					},
+					&s3.Object{
+						Key:          String("mock-prefix-wildcard/multiple/0"),
+						LastModified: Time(time.Date(2019, time.September, 16, 00, 0, 0, 0, time.UTC)),
+						Size:         Int64(4567),
+					},
+				},
+				IsTruncated: Bool(false),
+				KeyCount:    Int64(4),
+				MaxKeys:     Int64(1000),
+			},
+		},
 		// Test one object in a bucket
 		s3ExporterTestCase{
 			Name:   "one object",
@@ -147,6 +195,7 @@ type s3ExporterTestCase struct {
 	Bucket                string
 	Prefix                string
 	Delimiter             string
+	Expand                bool
 	ExpectedOutputLines   []string
 	ListObjectsV2Response *s3.ListObjectsV2Output
 }
@@ -177,7 +226,7 @@ func (tcs *s3ExporterTestCases) response(bucket, prefix string) (*s3.ListObjects
 // TestProbeHandler iterates over a list of test cases
 func TestProbeHandler(t *testing.T) {
 	for _, c := range testCases {
-		rr, err := probe(c.Bucket, c.Prefix, c.Delimiter)
+		rr, err := probe(c.Bucket, c.Prefix, c.Delimiter, c.Expand)
 		if err != nil {
 			t.Errorf(err.Error())
 		}
@@ -197,13 +246,16 @@ func (m *mockS3Client) ListObjectsV2(input *s3.ListObjectsV2Input) (*s3.ListObje
 }
 
 // Repeatable probe function
-func probe(bucket, prefix, delimiter string) (rr *httptest.ResponseRecorder, err error) {
+func probe(bucket, prefix, delimiter string, expand bool) (rr *httptest.ResponseRecorder, err error) {
 	uri := "/probe?bucket=" + bucket
 	if len(prefix) > 0 {
 		uri = uri + "&prefix=" + prefix
 	}
 	if len(delimiter) > 0 {
 		uri = uri + "&delimiter=" + delimiter
+	}
+	if expand {
+		uri = uri + "&expand=true"
 	}
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
