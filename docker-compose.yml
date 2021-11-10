@@ -1,0 +1,13 @@
+version: '3.7'
+
+services:
+
+  aws-exporter:
+    image: ribbybibby/s3-exporter
+    container_name: aws-exporter
+    ports:
+      - 9340:9340
+    environment:
+      - AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY
+      - AWS_SECRET_ACCESS_KEY=YOUR_SECRET_ACCESS_KEY
+      - AWS_REGION=YOUR_REGION
