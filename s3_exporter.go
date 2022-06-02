@@ -238,7 +238,7 @@ func main() {
 		endpointURL    = app.Flag("s3.endpoint-url", "Custom endpoint URL").Default("").String()
 		disableSSL     = app.Flag("s3.disable-ssl", "Custom disable SSL").Bool()
 		forcePathStyle = app.Flag("s3.force-path-style", "Custom force path style").Bool()
-		insecureTLS    = app.Flag("tls.insecure", "Disable TLS certificate verification").Bool()
+		insecureTLS    = app.Flag("http.tls-insecure", "Disable TLS certificate verification").Bool()
 		timeout        = app.Flag("http.timeout", "HTTP Timeout").Default("10").Int()
 	)
 
