@@ -110,7 +110,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		if err != nil {
 			log.Errorln(err)
 			ch <- prometheus.MustNewConstMetric(
-				s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix,
+				s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix, e.delimiter,
 			)
 			return
 		}
