@@ -31,7 +31,7 @@ var (
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
-					&s3.Object{
+					{
 						Key:          String("one"),
 						LastModified: Time(time.Date(2019, time.June, 13, 21, 0, 0, 0, time.UTC)),
 						Size:         Int64(1234),
@@ -81,22 +81,22 @@ var (
 			},
 			ListObjectsV2Response: &s3.ListObjectsV2Output{
 				Contents: []*s3.Object{
-					&s3.Object{
+					{
 						Key:          String("multiple0"),
 						LastModified: Time(time.Date(2019, time.June, 13, 21, 0, 0, 0, time.UTC)),
 						Size:         Int64(1234),
 					},
-					&s3.Object{
+					{
 						Key:          String("multiple1"),
 						LastModified: Time(time.Date(2019, time.July, 14, 22, 0, 0, 0, time.UTC)),
 						Size:         Int64(2345),
 					},
-					&s3.Object{
+					{
 						Key:          String("multiple2"),
 						LastModified: Time(time.Date(2019, time.August, 15, 23, 0, 0, 0, time.UTC)),
 						Size:         Int64(3456),
 					},
-					&s3.Object{
+					{
 						Key:          String("multiple/0"),
 						LastModified: Time(time.Date(2019, time.September, 16, 00, 0, 0, 0, time.UTC)),
 						Size:         Int64(4567),

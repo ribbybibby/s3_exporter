@@ -131,7 +131,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		}
 		query.ContinuationToken = resp.NextContinuationToken
 	}
-	listDuration := time.Now().Sub(startList).Seconds()
+	listDuration := time.Since(startList).Seconds()
 
 	ch <- prometheus.MustNewConstMetric(
 		s3ListSuccess, prometheus.GaugeValue, 1, e.bucket, e.prefix, e.delimiter,
