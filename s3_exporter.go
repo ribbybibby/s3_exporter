@@ -6,9 +6,13 @@ import (
 	"os"
 	"time"
 
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/log"
+	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/kit/log"
+	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
@@ -63,7 +67,10 @@ var (
 		"A count of all the keys between the prefix and the next occurrence of the string specified by the delimiter",
 		[]string{"bucket", "prefix", "delimiter"}, nil,
 	)
+
 )
+
+var logger log.Logger
 
 // Exporter is our exporter type
 type Exporter struct {
@@ -108,9 +115,9 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	for {
 		resp, err := e.svc.ListObjectsV2(query)
 		if err != nil {
-			log.Errorln(err)
+			level.Error(logger).Log(err)
 			ch <- prometheus.MustNewConstMetric(
-				s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix,
+				s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix, e.delimiter,
 			)
 			return
 		}
@@ -195,7 +202,7 @@ type discoveryTarget struct {
 func discoveryHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 	result, err := svc.ListBuckets(&s3.ListBucketsInput{})
 	if err != nil {
-		log.Errorln(err)
+		level.Error(logger).Log(err)
 		http.Error(w, "error listing buckets", http.StatusInternalServerError)
 		return
 	}
@@ -239,17 +246,19 @@ func main() {
 		forcePathStyle = app.Flag("s3.force-path-style", "Custom force path style").Bool()
 	)
 
-	log.AddFlags(app)
+
 	app.Version(version.Print(namespace + "_exporter"))
 	app.HelpFlag.Short('h')
+	var promlogConfig = &promlog.Config{}
+	flag.AddFlags(app,promlogConfig)
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-
+	logger = promlog.New(promlogConfig)
 	var sess *session.Session
 	var err error
 
 	sess, err = session.NewSession()
 	if err != nil {
-		log.Errorln("Error creating sessions ", err)
+		level.Error(logger).Log("Error creating sessions ", err)
 	}
 
 	cfg := aws.NewConfig()
@@ -257,13 +266,15 @@ func main() {
 		cfg.WithEndpoint(*endpointURL)
 	}
 
+	level.Info(logger).Log("Endpoint Url", *endpointURL)
 	cfg.WithDisableSSL(*disableSSL)
 	cfg.WithS3ForcePathStyle(*forcePathStyle)
 
 	svc := s3.New(sess, cfg)
 
-	log.Infoln("Starting "+namespace+"_exporter", version.Info())
-	log.Infoln("Build context", version.BuildContext())
+    level.Info(logger).Log("Starting "+namespace+"_exporter", version.Info())
+	level.Info(logger).Log("Build context", version.BuildContext())
+
 
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc(*probePath, func(w http.ResponseWriter, r *http.Request) {
@@ -284,6 +295,6 @@ func main() {
 						 </html>`))
 	})
 
-	log.Infoln("Listening on", *listenAddress)
-	log.Fatal(http.ListenAndServe(*listenAddress, nil))
+	level.Info(logger).Log("Listening on", *listenAddress)
+	level.Error(logger).Log(http.ListenAndServe(*listenAddress, nil))
 }
