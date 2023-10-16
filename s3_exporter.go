@@ -65,12 +65,26 @@ var (
 	)
 )
 
+// Counter is a receiver function that in the context of an Exporter populates an ItemAggregator
+type Counter func(e *Exporter, ia *ItemAggregator) error
+
 // Exporter is our exporter type
 type Exporter struct {
 	bucket    string
 	prefix    string
 	delimiter string
 	svc       s3iface.S3API
+	counter   Counter
+}
+
+// ItemAggregator is where we collect statistics on files/objects
+type ItemAggregator struct {
+	lastModified      time.Time
+	numberOfObjects   float64
+	totalSize         int64
+	biggestObjectSize int64
+	lastObjectSize    int64
+	commonPrefixes    int
 }
 
 // Describe all the metrics we export
@@ -88,48 +102,89 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	}
 }
 
-// Collect metrics
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	var lastModified time.Time
-	var numberOfObjects float64
-	var totalSize int64
-	var biggestObjectSize int64
-	var lastObjectSize int64
-	var commonPrefixes int
-
+func (e *Exporter) CountViaListObjectsV2(ia *ItemAggregator) error {
 	query := &s3.ListObjectsV2Input{
 		Bucket:    aws.String(e.bucket),
 		Prefix:    aws.String(e.prefix),
 		Delimiter: aws.String(e.delimiter),
 	}
 
-	// Continue making requests until we've listed and compared the date of every object
-	startList := time.Now()
 	for {
 		resp, err := e.svc.ListObjectsV2(query)
 		if err != nil {
-			log.Errorln(err)
-			ch <- prometheus.MustNewConstMetric(
-				s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix,
-			)
-			return
+			return err
 		}
-		commonPrefixes = commonPrefixes + len(resp.CommonPrefixes)
+		ia.commonPrefixes = ia.commonPrefixes + len(resp.CommonPrefixes)
 		for _, item := range resp.Contents {
-			numberOfObjects++
-			totalSize = totalSize + *item.Size
-			if item.LastModified.After(lastModified) {
-				lastModified = *item.LastModified
-				lastObjectSize = *item.Size
+			ia.numberOfObjects++
+			ia.totalSize = ia.totalSize + *item.Size
+			if item.LastModified.After(ia.lastModified) {
+				ia.lastModified = *item.LastModified
+				ia.lastObjectSize = *item.Size
 			}
-			if *item.Size > biggestObjectSize {
-				biggestObjectSize = *item.Size
+			if *item.Size > ia.biggestObjectSize {
+				ia.biggestObjectSize = *item.Size
 			}
 		}
 		if resp.NextContinuationToken == nil {
 			break
 		}
 		query.ContinuationToken = resp.NextContinuationToken
+	}
+	return nil
+}
+
+func (e *Exporter) CountViaListObjectVersions(ia *ItemAggregator) error {
+	query := &s3.ListObjectVersionsInput{
+		Bucket:    aws.String(e.bucket),
+		Prefix:    aws.String(e.prefix),
+		Delimiter: aws.String(e.delimiter),
+	}
+
+	for {
+		resp, err := e.svc.ListObjectVersions(query)
+		if err != nil {
+			return err
+		}
+		ia.commonPrefixes = ia.commonPrefixes + len(resp.CommonPrefixes)
+		for _, item := range resp.Versions {
+			ia.numberOfObjects++
+			ia.totalSize = ia.totalSize + *item.Size
+			if item.LastModified.After(ia.lastModified) {
+				ia.lastModified = *item.LastModified
+				ia.lastObjectSize = *item.Size
+			}
+			if *item.Size > ia.biggestObjectSize {
+				ia.biggestObjectSize = *item.Size
+			}
+		}
+		if !*resp.IsTruncated {
+			break
+		}
+		query.KeyMarker = resp.NextKeyMarker
+		query.VersionIdMarker = resp.NextVersionIdMarker
+	}
+	return nil
+}
+
+// Collect metrics
+func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	ia := &ItemAggregator{
+		numberOfObjects:   0,
+		totalSize:         0,
+		biggestObjectSize: 0,
+		lastObjectSize:    0,
+		commonPrefixes:    0,
+	}
+
+	// Continue making requests until we've listed and compared the date of every object
+	startList := time.Now()
+	if err := e.counter(e, ia); err != nil {
+		log.Errorln(err)
+		ch <- prometheus.MustNewConstMetric(
+			s3ListSuccess, prometheus.GaugeValue, 0, e.bucket, e.prefix,
+		)
+		return
 	}
 	listDuration := time.Now().Sub(startList).Seconds()
 
@@ -141,28 +196,28 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	)
 	if e.delimiter == "" {
 		ch <- prometheus.MustNewConstMetric(
-			s3LastModifiedObjectDate, prometheus.GaugeValue, float64(lastModified.UnixNano()/1e9), e.bucket, e.prefix,
+			s3LastModifiedObjectDate, prometheus.GaugeValue, float64(ia.lastModified.UnixNano()/1e9), e.bucket, e.prefix,
 		)
 		ch <- prometheus.MustNewConstMetric(
-			s3LastModifiedObjectSize, prometheus.GaugeValue, float64(lastObjectSize), e.bucket, e.prefix,
+			s3LastModifiedObjectSize, prometheus.GaugeValue, float64(ia.lastObjectSize), e.bucket, e.prefix,
 		)
 		ch <- prometheus.MustNewConstMetric(
-			s3ObjectTotal, prometheus.GaugeValue, numberOfObjects, e.bucket, e.prefix,
+			s3ObjectTotal, prometheus.GaugeValue, ia.numberOfObjects, e.bucket, e.prefix,
 		)
 		ch <- prometheus.MustNewConstMetric(
-			s3BiggestSize, prometheus.GaugeValue, float64(biggestObjectSize), e.bucket, e.prefix,
+			s3BiggestSize, prometheus.GaugeValue, float64(ia.biggestObjectSize), e.bucket, e.prefix,
 		)
 		ch <- prometheus.MustNewConstMetric(
-			s3SumSize, prometheus.GaugeValue, float64(totalSize), e.bucket, e.prefix,
+			s3SumSize, prometheus.GaugeValue, float64(ia.totalSize), e.bucket, e.prefix,
 		)
 	} else {
 		ch <- prometheus.MustNewConstMetric(
-			s3CommonPrefixes, prometheus.GaugeValue, float64(commonPrefixes), e.bucket, e.prefix, e.delimiter,
+			s3CommonPrefixes, prometheus.GaugeValue, float64(ia.commonPrefixes), e.bucket, e.prefix, e.delimiter,
 		)
 	}
 }
 
-func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
+func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API, withVersions bool) {
 	bucket := r.URL.Query().Get("bucket")
 	if bucket == "" {
 		http.Error(w, "bucket parameter is missing", http.StatusBadRequest)
@@ -172,11 +227,16 @@ func probeHandler(w http.ResponseWriter, r *http.Request, svc s3iface.S3API) {
 	prefix := r.URL.Query().Get("prefix")
 	delimiter := r.URL.Query().Get("delimiter")
 
+	counter := (*Exporter).CountViaListObjectsV2
+	if withVersions {
+		counter = (*Exporter).CountViaListObjectVersions
+	}
 	exporter := &Exporter{
 		bucket:    bucket,
 		prefix:    prefix,
 		delimiter: delimiter,
 		svc:       svc,
+		counter:   counter,
 	}
 
 	registry := prometheus.NewRegistry()
@@ -237,6 +297,7 @@ func main() {
 		endpointURL    = app.Flag("s3.endpoint-url", "Custom endpoint URL").Default("").String()
 		disableSSL     = app.Flag("s3.disable-ssl", "Custom disable SSL").Bool()
 		forcePathStyle = app.Flag("s3.force-path-style", "Custom force path style").Bool()
+		withVersions   = app.Flag("s3.with-versions", "Count all versioned objects").Bool()
 	)
 
 	log.AddFlags(app)
@@ -267,7 +328,7 @@ func main() {
 
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc(*probePath, func(w http.ResponseWriter, r *http.Request) {
-		probeHandler(w, r, svc)
+		probeHandler(w, r, svc, *withVersions)
 	})
 	http.HandleFunc(*discoveryPath, func(w http.ResponseWriter, r *http.Request) {
 		discoveryHandler(w, r, svc)
