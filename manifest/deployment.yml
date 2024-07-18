@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: s3-exporter
+  template:
+    metadata:
+      labels:
+        app: s3-exporter
+    spec:
+      containers:
+      - name: s3-exporter
+        image: ribbybibby/s3-exporter
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: s3-exporter-secret
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: s3-exporter-secret
+              key: AWS_SECRET_ACCESS_KEY
+        - name: S3_EXPORTER_S3_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: s3-exporter-config
+              key: S3_EXPORTER_S3_ENDPOINT_URL
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: s3-exporter-config
+              key: AWS_REGION
+        ports:
+        - containerPort: 9340
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 9340
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "100Mi"
+            cpu: "20m"
+          limits:
+            memory: "120Mi"
+            cpu: "30m"
