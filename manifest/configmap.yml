@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s3-exporter-config
+data:
+  S3_EXPORTER_S3_ENDPOINT_URL: "<value>" # must have port or put http or https behind it
+  AWS_REGION: "<value>"
+#  S3_EXPORTER_S3_ENDPOINT_URL: "https://mylocals3.com"
+#  AWS_REGION: "us-west-1"
